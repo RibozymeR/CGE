@@ -8,8 +8,8 @@ CGE -> Console Graphics Engine, the core of the game engine, special features in
 
 CIN -> Console Input, implements mouse (click, move, wheel) and key input via a handler system.
 
-To follow:		
-	- Sophisticated error handling		
+To follow:  
+	- Sophisticated error handling  
 	- GUI system		
 
 You need windows.h and a respective library to compile CGE.
