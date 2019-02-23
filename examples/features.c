@@ -7,12 +7,11 @@
 bool running;
 int dx = 0, state = 0, px, py;
 
-void frag(int x, int y, char colors[], bool *stencil){
+void fshader(int x, int y, char colors[], bool *stencil){
 	if(*stencil) colors[0] &= ~C_RED & ~C_BLUE;
 	colors[1] &= ~C_RED & ~C_BLUE;
 	*stencil = true;
 }
-FRAGMENT_SHADER shader = {&frag};
 
 void mousing(int x, int y, int button, int controls){
 	if(button == LEFT_BUTTON) cgePoint(x + dx, y);
@@ -39,11 +38,15 @@ void keying(bool keydown, int keycode, char character, int controls){
 	else if(keycode == VK_S){
 		TEXTURE *texture = cgeStoreTexture(0, 0, 80, 25);
 		if(texture == NULL) return;
-		cgeSaveTexture("texture.cge", texture);
+		FILE *tfile = fopen("texture.cge", "wb");
+		cgeSaveTexture(tfile, texture);
+		fclose(tfile);
 		cgeDeleteTexture(texture);
 	}
 	else if(keycode == VK_L){
-		TEXTURE *texture = cgeLoadTextureFile("texture.cge");
+		FILE *tfile = fopen("texture.cge", "wb");
+		TEXTURE *texture = cgeLoadTextureFile(tfile);
+		fclose(tfile);
 		if(texture == NULL) return;
 		cgeDrawTexture(texture, 0, 0);
 		cgeDeleteTexture(texture);
@@ -56,20 +59,18 @@ void keying(bool keydown, int keycode, char character, int controls){
 		cgeEnableStencil(0);
 	}
 	else if(keycode == VK_5){
-		cgeBindFragmentShader(&shader);
+		cgeBindFragmentShader(&fshader);
 	}
 	else if(keycode == VK_6){
 		cgeBindFragmentShader(NULL);
 	}
 	else if(keycode == VK_Y){
-		cgeApplyShader(&shader);
+		cgeApplyShader(&fshader);
 	}
 }
 
 int main(void){
 	freopen("err.txt", "w", stderr);
-	cgeSetCGEOutput(stderr, false);
-	cinSetCINOutput(stderr, false);
 	cgeInit(80, 25, "Test", C_RED | C_DARK, C_GREEN | C_BLUE);
 	cinInit();
 	cinAddMouseHandler(mousing);
