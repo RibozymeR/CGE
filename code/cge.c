@@ -1,63 +1,24 @@
-/*Console Graphics engine
-    Copyleft (C) 2017 RibozymeR
-
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
-#include <stdio.h>
 #include <math.h>
 #include "cge.h"
 
-#define exch(a, b) {register int h = a; a = b; b = h;}
-
-const int C_RED = 4, C_GREEN = 2, C_BLUE = 1, C_DARK = 8;
-const int C_WHITE = 7, C_SILVER = 15, C_GRAY = 0, C_BLACK = 8;
-const int C_KEEP = -1;
-
-const int MODE_FILL = 1, MODE_HIGH = 7, MODE_LOW = 8, MODE_EMPTY = 3;
-const int MODE_DUST = 4, MODE_HALF = 2, MODE_DENSE = 5;
-const int MODE_KEEP = -1;
+#define exch(a, b) {int h = a; a = b; b = h;}
 
 static const COORD ZERO = {0, 0};
 static const char *MAGIC = "CGET";
 
-int WIDTH, HEIGHT;
-static int SCRSIZE;
-static FILE *errstream = NULL;
+static size_t WIDTH, HEIGHT, SCRSIZE;
 static HANDLE hstdout;
 static SMALL_RECT bounds = {0, 0, 0, 0};
 static COORD size;
 static CHAR_INFO *screen;
-static bool stencil_enabled = false, *stencil = NULL;
+static bool stencil_enabled = false, *stencil;
 static int color;
 static char filler;
 static int stacksize = 0;
-static int *statestack;
-static FRAGMENT_SHADER *fragment_shader = NULL;
+static int statestack[128];
+static FRAGMENT_SHADER fragment_shader = NULL;
 
-static void err(char *c, int i){
-	fprintf(errstream, c, i);
-	fflush(errstream);
-}
-
-void cgeSetCGEOutput(FILE *newerr, bool close_old){
-	if(close_old && errstream != NULL) fclose(errstream);
-	errstream = newerr;
-	err("changed CGE Error output\n", 0);
-}
-
-void cgeInit(int width, int height, char *title, char fg, char bg){
+void cgeInit(size_t width, size_t height, char *title, char fg, char bg){
 	WIDTH = width;
 	HEIGHT = height;
 	SCRSIZE = WIDTH * HEIGHT;
@@ -73,24 +34,19 @@ void cgeInit(int width, int height, char *title, char fg, char bg){
 	CONSOLE_CURSOR_INFO ci = {2, false};
 	SetConsoleCursorInfo(hstdout, &ci);
 	SetConsoleScreenBufferSize(hstdout, size);
-	err("initiated console\n", 0);
-	
-	statestack = malloc(3 * sizeof(int));
 	
 	cgeSetColor(fg, bg);
 	cgeFillMode(MODE_FILL);
-	screen = (CHAR_INFO *)malloc(SCRSIZE * sizeof(CHAR_INFO));
-	stencil = (bool *)malloc(SCRSIZE);
+	screen = (CHAR_INFO *) malloc(SCRSIZE * sizeof(CHAR_INFO));
+	stencil = (bool *) malloc(SCRSIZE);
 	for(int i = 0; i < SCRSIZE; ++i) stencil[i] = true;
 	cgeClear();
 	cgeSwapBuffers();
 }
 
 void cgeTerminate(void){
-	free(statestack);
 	free(screen);
-	if(stencil != NULL) free(stencil);
-	err("terminated CGE\n", 0);
+	free(stencil);
 }
 
 void cgeSetColor(char foreground, char background){
@@ -172,7 +128,7 @@ static void cgePoint0(int pos){
 	if(fragment_shader != NULL){
 		paint = stencil[pos];
 		char cparts[] = {(pcolor & 15) ^ 8, (pcolor >> 4) ^ 8};
-		(*fragment_shader->fragment)(pos % WIDTH, pos / WIDTH, cparts, &paint);
+		fragment_shader(pos % WIDTH, pos / WIDTH, cparts, &paint);
 		pcolor = (cparts[1] << 4 | cparts[0]) ^ 0x88;
 	}
 	if(stencil_enabled && !paint) return;
@@ -275,24 +231,21 @@ void cgeDrawEllipse(int x0, int y0, int x1, int y1){
 }
 
 #define equscrgnd(a) (screen[a].Char.AsciiChar == ground->Char.AsciiChar && screen[a].Attributes == ground->Attributes)
-bool *searched;
-static void cgeFloodPos(int x, int y, CHAR_INFO *ground){
+static void cgeFloodPos(int x, int y, CHAR_INFO *ground, bool searched[]){
 	int pos = x + y * WIDTH;
 	searched[pos] = true;
-	if(y > 0 && !searched[pos - WIDTH] && equscrgnd(pos - WIDTH)) cgeFloodPos(x, y - 1, ground);
-	if(y < HEIGHT - 1 && !searched[pos + WIDTH] && equscrgnd(pos + WIDTH)) cgeFloodPos(x, y + 1, ground);
-	if(x > 0 && !searched[pos - 1] && equscrgnd(pos - 1)) cgeFloodPos(x - 1, y, ground);
-	if(x < WIDTH - 1 && !searched[pos + 1] && equscrgnd(pos + 1)) cgeFloodPos(x + 1, y, ground);
+	if(y > 0 && !searched[pos - WIDTH] && equscrgnd(pos - WIDTH)) cgeFloodPos(x, y - 1, ground, searched);
+	if(y < HEIGHT - 1 && !searched[pos + WIDTH] && equscrgnd(pos + WIDTH)) cgeFloodPos(x, y + 1, ground, searched);
+	if(x > 0 && !searched[pos - 1] && equscrgnd(pos - 1)) cgeFloodPos(x - 1, y, ground, searched);
+	if(x < WIDTH - 1 && !searched[pos + 1] && equscrgnd(pos + 1)) cgeFloodPos(x + 1, y, ground, searched);
 	cgePoint0(pos);
 }
 #undef equscrgnd
 
 void cgeFlood(int x, int y){
-	err("starting flood from %i, ", x);
-	err("%i (transformed)\n", y);
-	searched = (bool *)calloc(SCRSIZE, sizeof(bool));
-	cgeFloodPos(x, y, &screen[x + y * WIDTH]);
-	free(searched);
+	bool searched[SCRSIZE];
+	for(int i = 0; i < SCRSIZE; ++i) searched[i] = false;
+	cgeFloodPos(x, y, &screen[x + y * WIDTH], searched);
 }
 
 void cgeEnableStencil(bool enable){
@@ -320,36 +273,23 @@ void cgeClearStencil(int x, int y, int width, int height){
 	fillStencilRect(x, y, width, height, false);
 }
 
-TEXTURE *cgeLoadTextureFile(char *file){
-	err("loading texture\n", 0);
-	FILE *stream = fopen(file, "rb");
-	if(stream == NULL){
-		err("NULL!!", 0);
-		return NULL;
-	}
-	void *magic = malloc(4);
+TEXTURE *cgeLoadTextureFile(FILE *stream){
+	if(stream == NULL) return NULL;
+	
+	char magic[4];
 	fread(magic, 4, 1, stream);
-	if(memcmp(magic, MAGIC, 4)){
-		fclose(stream);
-		err("could not validate file\n", 0);
-		return NULL;
-	}
-	free(magic);
-	err("validated file via magic number\n", 0);
+	if(memcmp(magic, MAGIC, 4)) return NULL;
+	
 	TEXTURE *texture = malloc(sizeof(TEXTURE));
 	fread((void *)&texture->width, sizeof(int), 1, stream);
 	fread((void *)&texture->height, sizeof(int), 1, stream);
-	err("read width %i ", texture->width);
-	err("and height %i\n", texture->height);
-	register int size = texture->width * texture->height;
+	
+	int size = texture->width * texture->height;
 	texture->pixels = malloc(size * sizeof(CHAR_INFO));
-	err("loading pixels\n", 0);
 	for(int i = 0; i < size; ++i){
 		texture->pixels[i].Char.AsciiChar = fgetc(stream);
 		texture->pixels[i].Attributes = fgetc(stream);
 	}
-	fclose(stream);
-	err("loaded texture\n", 0);
 	return texture;
 }
 
@@ -361,8 +301,8 @@ TEXTURE *cgeLoadTexture(char pixels[], int width, int height, bool smallpixels){
 		height >>= 1;
 		for(int y = 0; y < height; y += 2){
 			for(int x = 0; x < width; ++x){
-				register int pos = x + width * y;
-				register int tpos = x + ((pos - x) >> 1);
+				int pos = x + width * y;
+				int tpos = x + ((pos - x) >> 1);
 				texture->pixels[tpos].Char.AsciiChar = 0xDC;
 				texture->pixels[tpos].Attributes = pixels[pos] << 4 | (pixels[pos + width] & 0xF);
 			}
@@ -379,11 +319,8 @@ TEXTURE *cgeLoadTexture(char pixels[], int width, int height, bool smallpixels){
 	return texture;
 }
 
-void cgeSaveTexture(char *file, TEXTURE *texture){
-	err("saving texture with size %i, ", texture->width);
-	err("%i\n", texture->height);
-	FILE *stream = fopen(file, "wb");
-	if(stream == NULL) return;
+int cgeSaveTexture(FILE *stream, TEXTURE *texture){
+	if(stream == NULL) return 1;
 	fwrite(MAGIC, 4, 1, stream);
 	fwrite((const void *)&texture->width, sizeof(int), 1, stream);
 	fwrite((const void *)&texture->height, sizeof(int), 1, stream);
@@ -391,88 +328,76 @@ void cgeSaveTexture(char *file, TEXTURE *texture){
 		fputc(texture->pixels[i].Char.AsciiChar, stream);
 		fputc(texture->pixels[i].Attributes, stream);
 	}
-	fclose(stream);
-	err("saved texture\n", 0);
+	return 0;
 }
 
 void cgeDrawTexture(TEXTURE *texture, int x0, int y0){
-	err("starting to draw texture\n", 0);
-	for(register int x = 0; x < texture->width; ++x){
-		register int scrx = x0 + x;
+	for(int x = 0; x < texture->width; ++x){
+		int scrx = x0 + x;
 		if(scrx < 0 || scrx >= WIDTH) continue;
-		for(register int y = 0; y < texture->height; ++y){
-			register int scry = y0 + y;
-			register int pos = scrx + scry * WIDTH;
+		for(int y = 0; y < texture->height; ++y){
+			int scry = y0 + y;
+			int pos = scrx + scry * WIDTH;
 			if(scry < 0 || scry >= HEIGHT || (stencil_enabled && !stencil[pos])) continue;
 			screen[pos] = texture->pixels[x + y * texture->width];
 		}
 	}
-	err("drew texture\n", 0);
 }
 
 void cgeDrawTexturePart(TEXTURE *texture, int tx, int ty, int width, int height, int x0, int y0){
-	if(width > texture->width || height > texture->height){
-		err("part is too big", 0);
-		return;
-	}
-	err("starting to draw texture\n", 0);
-	for(register int x = tx; x < width; ++x){
-		register int scrx = x0 + x;
+	if(width > texture->width || height > texture->height) return;
+	
+	for(int x = tx; x < width; ++x){
+		int scrx = x0 + x;
 		if(scrx < 0 || scrx >= WIDTH) continue;
-		for(register int y = ty; y < height; ++y){
-			register int scry = y0 + y;
-			register int pos = scrx + scry * WIDTH;
+		for(int y = ty; y < height; ++y){
+			int scry = y0 + y;
+			int pos = scrx + scry * WIDTH;
 			if(scry < 0 || scry >= HEIGHT || (stencil_enabled && !stencil[pos])) continue;
 			screen[pos] = texture->pixels[x + y * texture->width];
 		}
 	}
-	err("drew texture\n", 0);
 }
 
 TEXTURE *cgeStoreTexture(int x, int y, int width, int height){
-	err("storing texture from %i, ", x);
-	err("%i\n", y);
 	TEXTURE *texture = malloc(sizeof(TEXTURE));
 	texture->width = width;
 	texture->height = height;
 	texture->pixels = malloc(width * height * sizeof(CHAR_INFO));
-	for(register int tx = 0; tx < width; ++tx){
-		register int scrx = x + tx;
+	for(int tx = 0; tx < width; ++tx){
+		int scrx = x + tx;
 		if(scrx < 0 || scrx >= WIDTH) continue;
-		for(register int ty = 0; ty < height; ++ty){
-			register int scry = y + ty;
-			register int pos = scrx + scry * WIDTH;
+		for(int ty = 0; ty < height; ++ty){
+			int scry = y + ty;
+			int pos = scrx + scry * WIDTH;
 			if(scry < 0 || scry >= HEIGHT || (stencil_enabled && !stencil[pos])) continue;
 			texture->pixels[tx + ty * width] = screen[pos];
 		}
 	}
-	err("stored texture\n", 0);
 	return texture;
 }
 
 void cgeDeleteTexture(TEXTURE *texture){
-	err("freeing pixels\n", 0);
 	free(texture->pixels);
-	err("freeing texture struct\n", 0);
 	free(texture);
 }
 
-void cgeBindFragmentShader(FRAGMENT_SHADER *shader){
+void cgeBindFragmentShader(FRAGMENT_SHADER shader){
 	fragment_shader = shader;
 }
 
-void cgeApplyShader(FRAGMENT_SHADER *shader){
+void cgeApplyShader(FRAGMENT_SHADER shader){
 	if(shader == NULL) return;
 	int pos = 0;
 	char cparts[2];
 	bool paint;
 	for(int y = 0; y < HEIGHT; ++y){
 		for(int x = 0; x < WIDTH; ++x){
-			register int color = screen[pos].Attributes;
+			int color = screen[pos].Attributes;
 			cparts[0] = (color & 15) ^ 8;
 			cparts[1] = (color >> 4) ^ 8;
 			paint = stencil[pos];
-			(*shader->fragment)(x, y, cparts, &paint);
+			shader(x, y, cparts, &paint);
 			if(paint) screen[pos].Attributes = (cparts[1] << 4 | cparts[0]) ^ 0x88;
 			++pos;
 		}
@@ -494,12 +419,10 @@ void cgePushState(void){
 	statestack[stacksize++] = color;
 	statestack[stacksize++] = filler;
 	statestack[stacksize++] = stencil_enabled;
-	realloc(statestack, stacksize * sizeof(int));
 }
 
 void cgePopState(void){
 	stencil_enabled = statestack[--stacksize];
 	filler = statestack[--stacksize];
 	color = statestack[--stacksize];
-	realloc(statestack, stacksize * sizeof(int));
 }

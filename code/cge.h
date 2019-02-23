@@ -3,26 +3,45 @@
 
 #define STRICT
 #include <windows.h>
+#include <stdio.h>
 #include <stdbool.h>
 
-extern const int C_RED, C_GREEN, C_BLUE, C_DARK, C_KEEP, C_WHITE, C_SILVER, C_GRAY, C_DARK;
-extern const int MODE_FILL, MODE_HALF, MODE_EMPTY, MODE_DUST, MODE_DENSE, MODE_LOW, MODE_HIGH, MODE_KEEP;
+///Color constants
+#define C_RED 4
+#define C_GREEN 2
+#define C_BLUE 1
+#define C_DARK 8
+#define C_WHITE 7
+#define C_SILVER 15
+#define C_GRAY 0
+#define C_BLACK 8
+///Keep color value (for example to only repaint background)
+#define C_KEEP (-1)
 
-typedef struct{
-	/**fragment's coordinates, array of foreground and background color, pointer to stencil buffer value*/
-	void (*fragment)(int, int, char[], bool *);
-}FRAGMENT_SHADER;
+///Painting modes
+#define MODE_FILL 1
+#define MODE_HIGH 7
+#define MODE_LOW 8
+#define MODE_EMPTY 3
+#define MODE_DUST 4
+#define MODE_HALF 2
+#define MODE_DENSE 5
+#define MODE_KEEP (-1)
 
+///Fragment shader type; function (x, y, [foreground, background], enable deletion by stencil buffer)
+typedef void (*FRAGMENT_SHADER)(int, int, char[], bool *);
+
+///Texture structure
 typedef struct{
-	int width, height;
+	size_t width, height;
 	CHAR_INFO *pixels;
-}TEXTURE;
+} TEXTURE;
 
-extern int WIDTH, HEIGHT;
-
-extern void cgeSetCGEOutput(FILE *output, bool close_old);
-extern void cgeInit(int width, int height, char *title, char fg, char bg);
+extern void cgeInit(size_t width, size_t height, char *title, char fg, char bg);
 extern void cgeTerminate(void);
+
+extern size_t cgeGetWidth();
+extern size_t cgeGetHeight();
 
 extern void cgeSetColor(char fg, char bg);
 extern void cgeFillMode(char mode);
@@ -43,18 +62,31 @@ extern void cgeEnableStencil(bool enable);
 extern void cgeStencil(int x, int y, int width, int height);
 extern void cgeClearStencil(int x, int y, int width, int height);
 
-extern TEXTURE *cgeLoadTextureFile(char *file);
+///loads a texture from a file; returns NULL in case of error
+extern TEXTURE *cgeLoadTextureFile(FILE *stream);
+///reads a texture from an array
 extern TEXTURE *cgeLoadTexture(char pixels[], int width, int height, bool smallpixels);
-extern void cgeSaveTexture(char *file, TEXTURE *texture);
+
+///returns non-zero in case of error
+extern int cgeSaveTexture(FILE *stream, TEXTURE *texture);
+
+///draws a texture at the specified location
 extern void cgeDrawTexture(TEXTURE *texture, int x, int y);
+///draws part of a texture at the specified location
 extern void cgeDrawTexturePart(TEXTURE *texture, int tx, int ty, int width, int height, int x, int y);
+///stores part of the screen in a texture
 extern TEXTURE *cgeStoreTexture(int x, int y, int width, int height);
+///deletes a texture
 extern void cgeDeleteTexture(TEXTURE *texture);
 
-extern void cgeBindFragmentShader(FRAGMENT_SHADER *shader);
-extern void cgeApplyShader(FRAGMENT_SHADER *shader);
+///binds a fragment shader
+extern void cgeBindFragmentShader(FRAGMENT_SHADER shader);
+///applies a fragment shader to the screen
+extern void cgeApplyShader(FRAGMENT_SHADER shader);
 
+///makes all changes visible
 extern void cgeSwapBuffers(void);
+///clears everything; ignores stencil buffer
 extern void cgeClear(void);
 extern void cgePushState(void);
 extern void cgePopState(void);
