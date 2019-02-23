@@ -57,8 +57,6 @@ void keying(bool keydown, int keycode, char character, int controls){
 int main(void){
 	for(int i = 2; i < 8; ++i) colors1[i] = colors0[i] | C_DARK;
 	
-	freopen("err.txt", "w", stderr);
-	cinSetCINOutput(stderr, true);
 	cgeInit(80, 43, "CGE Paint", C_BLACK, C_WHITE);
 	cinInit();
 	cinAddMouseHandler(mousing);
@@ -96,8 +94,6 @@ int main(void){
 		cgeSwapBuffers();
 	}
 	
-	fprintf(stderr, "terminating");
-	fclose(stderr);
 	cgeTerminate();
 	cinTerminate();
 }

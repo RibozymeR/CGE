@@ -70,7 +70,6 @@ void keying(bool keydown, int keycode, char character, int controls){
 }
 
 int main(void){
-	freopen("err.txt", "w", stderr);
 	cgeInit(80, 25, "Test", C_RED | C_DARK, C_GREEN | C_BLUE);
 	cinInit();
 	cinAddMouseHandler(mousing);
@@ -84,7 +83,6 @@ int main(void){
 		cinPollEvents();
 		cgeSwapBuffers();
 	}
-	fclose(stderr);
 	cgeTerminate();
 	cinTerminate();
 }
