@@ -71,7 +71,6 @@ typedef void (*MOUSE_WHEEL_HANDLER)(int, int, int, int);
 ///keydown, keycode, character, controls
 typedef void (*KEY_HANDLER)(bool, int, char, int);
 
-extern void cinSetCINOutput(FILE *output, bool close_old);
 extern void cinInit(void);
 extern void cinTerminate(void);
 
