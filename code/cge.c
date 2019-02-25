@@ -57,14 +57,14 @@ void cgeSetColor(char foreground, char background){
 
 void cgeFillMode(char mode){
 	switch(mode){
-		case 1:	filler = 0xDB; break;
-		case 2:	filler = 0xB1; break;
-		case 3:	filler = ' ';  break;
-		case 4:	filler = 0xB0; break;
-		case 5: filler = 0xB2; break;
-		case 6:	filler = 0;    break;
-		case 7: filler = 0xDF; break;
-		case 8: filler = 0xDC; break;
+		case MODE_KEEP:		filler = 0; break;
+		case MODE_FILL:		filler = 0xDB; break;
+		case MODE_HALF:		filler = 0xB1; break;
+		case MODE_EMPTY:	filler = ' ';  break;
+		case MODE_DUST:		filler = 0xB0; break;
+		case MODE_DENSE:	filler = 0xB2; break;
+		case MODE_HIGH:		filler = 0xDF; break;
+		case MODE_LOW:		filler = 0xDC; break;
 		default: filler = ' '; break;
 	}
 }
@@ -82,7 +82,7 @@ void cgeWriteChar(char c, int x, int y){
 void cgeWriteString(char *str, int len, int x, int y){
 	int pos = x + y * WIDTH;
 	for(int i = 0; i < len; ++i){
-		register char c = str[i];
+		char c = str[i];
 		if(c){
 			screen[pos].Char.AsciiChar = c;
 			screen[pos++].Attributes = color;
@@ -97,9 +97,9 @@ void cgeWriteString(char *str, int len, int x, int y){
 //\c(x) -> foreground = x
 void cgeWriteStringF(char *str, int len, int x, int y){
 	int pos = x + y * WIDTH;
-	register bool ctrlmode = false;
+	bool ctrlmode = false;
 	for(int i = 0; i < len; ++i){
-		register char c = str[i];
+		char c = str[i];
 		if(!c) continue;
 		if(ctrlmode){
 			if(c == '\\'){
@@ -124,7 +124,7 @@ void cgeWriteStringF(char *str, int len, int x, int y){
 static void cgePoint0(int pos){
 	bool paint = true;
 	if(pos < 0 || pos >= SCRSIZE) return;
-	register int pcolor = color;
+	int pcolor = color;
 	if(fragment_shader != NULL){
 		paint = stencil[pos];
 		char cparts[] = {(pcolor & 15) ^ 8, (pcolor >> 4) ^ 8};
@@ -189,8 +189,8 @@ void cgeClearRect(int x, int y, int width, int height){
 void cgeFillRect(int x, int y, int width, int height){
 	if(width < 0) x -= (width = -width);
 	if(height < 0) y -= (height = -height);
-	register int incr = WIDTH - width, c = 0;
-	for(register int i = x + y * WIDTH; i < x + width + (y + height - 1) * WIDTH; ++i){
+	int incr = WIDTH - width, c = 0;
+	for(int i = x + y * WIDTH; i < x + width + (y + height - 1) * WIDTH; ++i){
 		cgePoint0(i);
 		if(++c == width){
 			c = 0;
@@ -255,8 +255,8 @@ void cgeEnableStencil(bool enable){
 static void fillStencilRect(int x, int y, int width, int height, bool state){
 	if(width < 0) x -= (width = -width);
 	if(height < 0) y -= (height = -height);
-	register int incr = WIDTH - width, c = 0;
-	for(register int i = x + y * WIDTH; i < x + width + (y + height - 1) * WIDTH; ++i){
+	int incr = WIDTH - width, c = 0;
+	for(int i = x + y * WIDTH; i < x + width + (y + height - 1) * WIDTH; ++i){
 		stencil[i] = state;
 		if(++c == width){
 			c = 0;
